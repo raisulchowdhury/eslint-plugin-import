@@ -59,8 +59,51 @@ jobs:
               else:
                   raise SystemExit(f"Unsupported operation: {kind}")
               path.write_text(text)
-          spec_path.unlink()
+
+          runtime = {
+              'setup_commands': spec.get('setup_commands', []),
+              'test_commands': spec.get('test_commands', []),
+              'expect_failure': bool(spec.get('expect_failure', False)),
+          }
+          Path('.oss-runtime.json').write_text(json.dumps(runtime))
           Path('.oss-commit-message').write_text(spec['message'])
+          spec_path.unlink()
+          PY
+      - name: Run focused verification
+        shell: bash
+        run: |
+          if [ ! -f .oss-runtime.json ]; then
+            exit 0
+          fi
+          python - <<'PY'
+          import json
+          import subprocess
+          from pathlib import Path
+
+          runtime = json.loads(Path('.oss-runtime.json').read_text())
+          for command in runtime['setup_commands']:
+              print(f"::group::setup: {command}", flush=True)
+              result = subprocess.run(command, shell=True)
+              print('::endgroup::', flush=True)
+              if result.returncode != 0:
+                  raise SystemExit(result.returncode)
+
+          failures = 0
+          for command in runtime['test_commands']:
+              print(f"::group::test: {command}", flush=True)
+              result = subprocess.run(command, shell=True)
+              print('::endgroup::', flush=True)
+              failures += int(result.returncode != 0)
+
+          if runtime['expect_failure']:
+              if not runtime['test_commands']:
+                  raise SystemExit('expect_failure requires at least one test command')
+              if failures == 0:
+                  raise SystemExit('Expected regression test to fail, but all tests passed')
+              print('RED VERIFIED: focused regression fails before implementation')
+              Path('.oss-red-only').write_text('1')
+          elif failures:
+              raise SystemExit(f'{failures} focused verification command(s) failed')
           PY
       - name: Commit patched files
         shell: bash
@@ -68,8 +111,12 @@ jobs:
           if [ ! -f .oss-commit-message ]; then
             exit 0
           fi
+          if [ -f .oss-red-only ]; then
+            echo "Red phase verified; not committing test-only patch."
+            exit 0
+          fi
           msg="$(cat .oss-commit-message)"
-          rm .oss-commit-message
+          rm -f .oss-commit-message .oss-runtime.json .oss-red-only
           git config user.name "oss-patchbot"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A
