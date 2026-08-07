@@ -1,0 +1,142 @@
+name: Isolated OSS verifier
+
+on:
+  push:
+    branches:
+      - 'verify/**'
+
+permissions:
+  contents: write
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: request
+      - id: meta
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json, os
+          from pathlib import Path
+          spec = json.loads(Path('request/.request.json').read_text())
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as f:
+              f.write(f"branch={spec['target_branch']}\n")
+          PY
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.meta.outputs.branch }}
+          path: target
+          fetch-depth: 0
+      - name: Apply exact operations
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          spec = json.loads(Path('request/.request.json').read_text())
+          root = Path('target')
+          for op in spec['operations']:
+              path = root / op['path']
+              kind = op['kind']
+              if kind == 'delete':
+                  if path.exists():
+                      path.unlink()
+                  continue
+              text = path.read_text()
+              if kind == 'replace':
+                  old, new = op['old'], op['new']
+                  expected = op.get('expected', 1)
+                  actual = text.count(old)
+                  if actual != expected:
+                      raise SystemExit(f"{path}: expected {expected} matches, found {actual}")
+                  text = text.replace(old, new, expected)
+              elif kind == 'insert_after':
+                  anchor = op['anchor']
+                  expected = op.get('expected', 1)
+                  actual = text.count(anchor)
+                  if actual != expected:
+                      raise SystemExit(f"{path}: expected {expected} anchors, found {actual}")
+                  text = text.replace(anchor, anchor + op['text'], expected)
+              elif kind == 'insert_before':
+                  anchor = op['anchor']
+                  expected = op.get('expected', 1)
+                  actual = text.count(anchor)
+                  if actual != expected:
+                      raise SystemExit(f"{path}: expected {expected} anchors, found {actual}")
+                  text = text.replace(anchor, op['text'] + anchor, expected)
+              else:
+                  raise SystemExit(f"unsupported operation {kind}")
+              path.write_text(text)
+          PY
+      - name: Run focused verification
+        shell: bash
+        working-directory: target
+        run: |
+          python - <<'PY'
+          import json, subprocess
+          from pathlib import Path
+          spec = json.loads(Path('../request/.request.json').read_text())
+          for cmd in spec.get('setup_commands', []):
+              print(f'::group::setup: {cmd}', flush=True)
+              rc = subprocess.run(cmd, shell=True).returncode
+              print('::endgroup::', flush=True)
+              if rc:
+                  raise SystemExit(rc)
+          failures = 0
+          for cmd in spec.get('test_commands', []):
+              print(f'::group::test: {cmd}', flush=True)
+              rc = subprocess.run(cmd, shell=True).returncode
+              print('::endgroup::', flush=True)
+              failures += int(rc != 0)
+          if spec.get('expect_failure'):
+              if not spec.get('test_commands'):
+                  raise SystemExit('red verification requires a test command')
+              if failures == 0:
+                  raise SystemExit('expected focused test to fail, but it passed')
+              Path('../request/.status').write_text('red')
+              print('RED VERIFIED')
+          elif failures:
+              raise SystemExit(f'{failures} focused verification command(s) failed')
+          else:
+              Path('../request/.status').write_text('green')
+          PY
+      - name: Commit verified target patch
+        if: success()
+        shell: bash
+        working-directory: target
+        run: |
+          if [ "$(cat ../request/.status)" = "red" ]; then
+            echo 'Red phase only; target branch unchanged.'
+            exit 0
+          fi
+          msg="$(python -c "import json; print(json.load(open('../request/.request.json'))['message'])")"
+          git config user.name 'oss-verifier'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          git commit -m "$msg"
+          git push origin "HEAD:${{ steps.meta.outputs.branch }}"
+      - name: Record verifier result
+        if: success()
+        shell: bash
+        working-directory: request
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          spec = json.loads(Path('.request.json').read_text())
+          status = Path('.status').read_text().strip()
+          Path('.result.json').write_text(json.dumps({
+              'status': status,
+              'target_branch': spec['target_branch'],
+              'message': spec['message'],
+          }, indent=2) + '\n')
+          Path('.status').unlink()
+          PY
+          git config user.name 'oss-verifier'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add .result.json
+          git commit -m 'verify: record result [skip ci]'
+          git push origin HEAD:${GITHUB_REF_NAME}

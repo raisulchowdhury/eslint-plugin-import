@@ -1,3 +1,0 @@
-const Components = () => {
-  return <></>;
-};

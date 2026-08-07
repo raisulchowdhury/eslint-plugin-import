@@ -1,3 +1,0 @@
-exports.languageOptions = {
-  sourceType: 'module',
-}
