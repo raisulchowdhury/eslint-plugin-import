@@ -57,11 +57,10 @@ module.exports = {
       const hasKeywords = (/^(module|exports)$/).test(node.object.name);
       const objectScope = hasKeywords && findScope(context, node.object.name);
       const variableDefinition = objectScope && findDefinition(objectScope, node.object.name);
-      const isImportBinding = variableDefinition && variableDefinition.type === 'ImportBinding';
-      const hasCJSExportReference = hasKeywords && (!objectScope || objectScope.type === 'module');
+      const hasCJSExportReference = hasKeywords && !variableDefinition;
       const isException = !!options.exceptions && options.exceptions.some((glob) => minimatch(fileName, glob));
 
-      if (isIdentifier && hasCJSExportReference && !isEntryPoint && !isException && !isImportBinding) {
+      if (isIdentifier && hasCJSExportReference && !isEntryPoint && !isException) {
         importDeclarations.forEach((importDeclaration) => {
           context.report({
             node: importDeclaration,
