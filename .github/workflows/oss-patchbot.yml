@@ -1,0 +1,77 @@
+name: OSS patchbot
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: write
+
+jobs:
+  apply-patch:
+    if: startsWith(github.head_ref, 'oss/')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.ref }}
+          fetch-depth: 0
+      - name: Apply exact patch spec
+        shell: bash
+        run: |
+          if [ ! -f .oss-patch.json ]; then
+            echo "No patch spec; nothing to do."
+            exit 0
+          fi
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          spec_path = Path('.oss-patch.json')
+          spec = json.loads(spec_path.read_text())
+          for op in spec['operations']:
+              path = Path(op['path'])
+              text = path.read_text()
+              kind = op['kind']
+              if kind == 'replace':
+                  old = op['old']
+                  new = op['new']
+                  expected = op.get('expected', 1)
+                  actual = text.count(old)
+                  if actual != expected:
+                      raise SystemExit(f"{path}: expected {expected} matches, found {actual}")
+                  text = text.replace(old, new, expected)
+              elif kind == 'insert_after':
+                  anchor = op['anchor']
+                  expected = op.get('expected', 1)
+                  actual = text.count(anchor)
+                  if actual != expected:
+                      raise SystemExit(f"{path}: expected {expected} anchors, found {actual}")
+                  text = text.replace(anchor, anchor + op['text'], expected)
+              elif kind == 'insert_before':
+                  anchor = op['anchor']
+                  expected = op.get('expected', 1)
+                  actual = text.count(anchor)
+                  if actual != expected:
+                      raise SystemExit(f"{path}: expected {expected} anchors, found {actual}")
+                  text = text.replace(anchor, op['text'] + anchor, expected)
+              else:
+                  raise SystemExit(f"Unsupported operation: {kind}")
+              path.write_text(text)
+          spec_path.unlink()
+          Path('.oss-commit-message').write_text(spec['message'])
+          PY
+      - name: Commit patched files
+        shell: bash
+        run: |
+          if [ ! -f .oss-commit-message ]; then
+            exit 0
+          fi
+          msg="$(cat .oss-commit-message)"
+          rm .oss-commit-message
+          git config user.name "oss-patchbot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "$msg"
+          git push origin "HEAD:${{ github.event.pull_request.head.ref }}"
