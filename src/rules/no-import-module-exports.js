@@ -74,7 +74,11 @@ module.exports = {
 
     return {
       ImportDeclaration(node) {
-        importDeclarations.push(node);
+        const hasRuntimeBinding = node.importKind !== 'type'
+          && (node.specifiers.length === 0 || node.specifiers.some((specifier) => specifier.importKind !== 'type'));
+        if (hasRuntimeBinding) {
+          importDeclarations.push(node);
+        }
       },
       MemberExpression(node) {
         if (!alreadyReported) {
