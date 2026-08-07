@@ -5,6 +5,9 @@ import readPkgUp from 'eslint-module-utils/readPkgUp';
 
 export function getFilePackagePath(filePath) {
   const fp = pkgUp({ cwd: filePath });
+  if (!fp) {
+    throw new Error(`Unable to find package.json from ${filePath}`);
+  }
   return dirname(fp);
 }
 
