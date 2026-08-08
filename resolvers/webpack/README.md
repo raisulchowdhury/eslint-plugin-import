@@ -81,6 +81,10 @@ settings:
             - .jsx
 ```
 
+> [!NOTE]
+>
+> The resolver follows webpack's `resolve` configuration. Custom aliases therefore need to be present in `resolve.alias`, and extensions that webpack should resolve without being written in the import specifier must be present in `resolve.extensions`. For example, resolving `./Component` to `Component.jsx` requires `.jsx` in that list.
+
 If your config relies on [environment variables](https://webpack.js.org/guides/environment-variables/), they can be specified using the `env` parameter.  If your config is a function, it will be invoked with the value assigned to `env`:
 
 ```yaml
