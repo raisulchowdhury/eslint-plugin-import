@@ -94,6 +94,10 @@ This plugin intends to support linting of ES2015+ (ES6+) import/export syntax, a
 
 <!-- end auto-generated rules list -->
 
+### Performance note: rules that resolve files
+
+Some rules resolve imported modules on the filesystem and can therefore cost more on large projects. This includes `no-relative-parent-imports`, `no-relative-packages`, `no-unresolved`, `no-extraneous-dependencies`, `no-unused-modules`, `no-restricted-paths`, `no-duplicates`, `no-useless-path-segments`, `no-cycle`, `no-internal-modules`, `extensions`, and `no-self-import`. Resolver caching and project-specific resolver settings can materially affect their cost.
+
 ## `eslint-plugin-import` for enterprise
 
 Available as part of the Tidelift Subscription.
