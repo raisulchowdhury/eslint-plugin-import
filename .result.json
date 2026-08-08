@@ -1,0 +1,5 @@
+{
+  "status": "green",
+  "target_branch": "oss/1181-webpack-alias-docs",
+  "message": "docs(webpack): clarify aliases and extensions"
+}
