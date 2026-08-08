@@ -1,0 +1,5 @@
+{
+  "status": "green",
+  "target_branch": "oss/2274-fs-rules-docs",
+  "message": "docs: identify rules that resolve files from disk"
+}
