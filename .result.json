@@ -1,0 +1,5 @@
+{
+  "status": "green",
+  "target_branch": "oss/2244-import-ignore-docs",
+  "message": "docs: clarify import/ignore matches resolved paths"
+}
