@@ -1,0 +1,5 @@
+{
+  "status": "red",
+  "target_branch": "oss/1739-query-string-resolution",
+  "message": "fix(no-unresolved): resolve file URL suffixes"
+}
