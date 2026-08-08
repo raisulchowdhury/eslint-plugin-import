@@ -366,6 +366,10 @@ not report the matching module if no `export`s are found.
 In practice, this means rules other than [`no-unresolved`](./docs/rules/no-unresolved.md#ignore) will not report on any
 `import`s with (absolute filesystem) paths matching this pattern.
 
+> [!NOTE]
+>
+> `import/ignore` is matched against the module's resolved absolute filesystem path, not the source specifier written in the import statement. Resolver aliases therefore need to resolve first before this setting can match them.
+
 `no-unresolved` has its own [`ignore`](./docs/rules/no-unresolved.md#ignore) setting.
 
 ```jsonc
